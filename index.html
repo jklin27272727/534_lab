@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cross-Asset Market Monitor</title>
+<meta name="description" content="A teaching dashboard pulling live Treasury rates, FX and crypto data from free public APIs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--ink:#14213D;--muted:#4A5568;--blue:#1D4E89;--amber:#C8811A;--green:#2E7D5B;--red:#B3372E;
+  --panel:#F6F8FB;--line:#DCE3EC;--wash:#EAF3FB;--bg:#fff;
+  --serif:'Source Serif 4',Georgia,serif;--sans:'Inter','Helvetica Neue',Arial,sans-serif}
+@media (prefers-color-scheme:dark){:root{--ink:#E6EBF2;--muted:#A0AABB;--blue:#6FA8E8;--amber:#E0A44A;--green:#5BBF8E;--red:#E57368;
+  --panel:#1A2130;--line:#2C3547;--wash:#17263B;--bg:#0F141D}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 60px}
+h1{font-family:var(--serif);font-weight:600;font-size:2.2rem;margin:4px 0 2px;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-weight:600;font-size:1.45rem;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.sub{color:var(--muted);font-size:.92rem;margin:0}
+.kicker{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);font-weight:600}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:22px 0}
+nav.tabs button{font:500 1rem var(--sans);background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;color:var(--muted);cursor:pointer}
+nav.tabs button[aria-selected="true"]{color:var(--blue);border-bottom-color:var(--blue)}
+section.tab{display:none}section.tab.on{display:block}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:18px}
+.metric{background:var(--panel);border-top:2px solid var(--ink);border-radius:0 0 6px 6px;padding:10px 14px}
+.metric .l{font-size:.84rem;color:var(--muted)}
+.metric .v{font-size:1.5rem;font-weight:500;font-variant-numeric:tabular-nums}
+.metric .d{font-size:.84rem;font-variant-numeric:tabular-nums;color:var(--muted)}
+.up{color:var(--green)!important}.down{color:var(--red)!important}
+.note{background:var(--wash);border-left:3px solid var(--blue);border-radius:0 6px 6px 0;padding:12px 18px;margin:14px 0;font-size:.97rem;line-height:1.6}
+.note b{color:var(--blue)}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:18px}
+.chartbox{position:relative;height:340px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-bottom:10px;flex-wrap:wrap}
+.seg button{font:500 .88rem var(--sans);background:var(--bg);color:var(--ink);border:0;border-right:1px solid var(--line);padding:6px 12px;cursor:pointer}
+.seg button:last-child{border-right:0}.seg button.on{background:var(--blue);color:#fff}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--muted);font-size:.82rem;background:var(--panel)}
+.status{font-size:.85rem;color:var(--muted);margin-top:6px}
+.badge{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--muted);margin-left:6px;vertical-align:middle}
+.badge.live{color:var(--green);border-color:var(--green)}
+.calc{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin:8px 0 14px}
+.calc label{display:flex;flex-direction:column;font-size:.84rem;color:var(--muted);gap:4px}
+.calc input,.calc select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:150px}
+.big{font-size:1.8rem;font-weight:600;font-variant-numeric:tabular-nums}
+footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);font-size:.84rem;color:var(--muted)}
+a{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">FinTech 534 · Lab</div>
+  <h1>Cross-Asset Market Monitor</h1>
+  <p class="sub">Live U.S. Treasury rates, FX and crypto pulled straight into the browser from free public APIs. <span id="stamp"></span></p>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="overview">Overview</button>
+    <button role="tab" aria-selected="false" data-tab="rates">Treasury rates</button>
+    <button role="tab" aria-selected="false" data-tab="fx">FX</button>
+    <button role="tab" aria-selected="false" data-tab="crypto">Crypto</button>
+    <button role="tab" aria-selected="false" data-tab="bond">Bond calculator</button>
+  </nav>
+
+  <!-- OVERVIEW -->
+  <section class="tab on" id="overview">
+    <div class="grid" id="ovMetrics"></div>
+    <div class="note"><b>How this page works.</b> It's one static <code>index.html</code> hosted on GitHub Pages. There's no server. When the page loads, your browser calls three public APIs directly: the U.S. Treasury <i>Fiscal Data</i> API, <i>Frankfurter</i> (ECB reference FX rates) and <i>CoinGecko</i>. If an API can't be reached, the page falls back to sample data and labels it as a sample.</div>
+    <div class="card"><h2>Risk-asset vs. rates, indexed (90 days = 100)</h2>
+      <div class="chartbox"><canvas id="ovChart"></canvas></div>
+      <div class="status">BTC and EUR/USD rebased to 100 at the start of the window, so you can compare their relative moves.</div>
+    </div>
+  </section>
+
+  <!-- RATES -->
+  <section class="tab" id="rates">
+    <h2>Average interest rate on U.S. Treasury debt <span class="badge" id="ratesBadge">loading</span></h2>
+    <div class="grid" id="ratesMetrics"></div>
+    <div class="card"><div class="chartbox"><canvas id="ratesChart"></canvas></div>
+      <div class="status">Source: U.S. Treasury Fiscal Data, <i>Average Interest Rates on U.S. Treasury Securities</i> (monthly).</div></div>
+    <div class="note"><b>Reading it.</b> Bills are the shortest maturities, so their rates follow the Fed policy rate almost one-for-one. Notes and bonds are locked in for years, so their <i>average</i> rate moves slowly as old low-coupon debt matures and gets refinanced at today's rates. When bill rates sit above the note average, refinancing pushes the government's interest bill up.</div>
+  </section>
+
+  <!-- FX -->
+  <section class="tab" id="fx">
+    <h2>U.S. dollar exchange rates <span class="badge" id="fxBadge">loading</span></h2>
+    <div class="grid" id="fxMetrics"></div>
+    <div class="card">
+      <div class="seg" id="fxSeg"></div>
+      <div class="chartbox"><canvas id="fxChart"></canvas></div>
+      <div class="status">Source: Frankfurter API (European Central Bank reference rates). Units of foreign currency per 1 USD.</div>
+    </div>
+    <div class="card"><h2>Currency converter</h2>
+      <div class="calc">
+        <label>Amount (USD)<input id="cvAmt" type="number" value="1000" min="0"></label>
+        <label>To<select id="cvTo"></select></label>
+        <div><div class="sub">Result</div><div class="big" id="cvOut">–</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CRYPTO -->
+  <section class="tab" id="crypto">
+    <h2>Crypto prices <span class="badge" id="cryptoBadge">loading</span></h2>
+    <div class="tablewrap card"><table><thead><tr><th>Asset</th><th>Price (USD)</th><th>24h</th><th>Market cap</th><th>24h volume</th></tr></thead><tbody id="cryptoBody"></tbody></table></div>
+    <div class="card"><h2>Bitcoin, last 90 days</h2>
+      <div class="chartbox"><canvas id="btcChart"></canvas></div>
+      <div class="status" id="btcStats"></div>
+    </div>
+  </section>
+
+  <!-- BOND CALC -->
+  <section class="tab" id="bond">
+    <h2>Bond price &amp; duration calculator</h2>
+    <div class="calc">
+      <label>Face value ($)<input id="bFace" type="number" value="1000"></label>
+      <label>Coupon rate (%)<input id="bCpn" type="number" value="4.25" step="0.05"></label>
+      <label>Yield to maturity (%)<input id="bYtm" type="number" value="4.00" step="0.05"></label>
+      <label>Years to maturity<input id="bYrs" type="number" value="10" min="1" max="30"></label>
+    </div>
+    <div class="grid" id="bondMetrics"></div>
+    <div class="card"><h2>Price–yield curve</h2><div class="chartbox"><canvas id="pyChart"></canvas></div>
+      <div class="status">Semi-annual coupons. The curve bends (convexity): a rate drop raises price by more than an equal rate rise lowers it.</div></div>
+  </section>
+
+  <footer>Built for FinTech 534 · Static HTML + Chart.js · Data: Treasury Fiscal Data, Frankfurter/ECB, CoinGecko · For teaching only, not investment advice.</footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (n, d = 2) => n.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
+const big = n => n >= 1e12 ? '$' + fmt(n/1e12) + 'T' : n >= 1e9 ? '$' + fmt(n/1e9) + 'B' : '$' + fmt(n/1e6) + 'M';
+const iso = d => d.toISOString().slice(0, 10);
+const charts = {};
+Chart.defaults.font.family = css('--sans').replace(/'/g, '');
+Chart.defaults.color = css('--muted');
+Chart.defaults.borderColor = css('--line');
+
+function metric(label, value, delta, cls = '') {
+  return `<div class="metric"><div class="l">${label}</div><div class="v">${value}</div><div class="d ${cls}">${delta || '&nbsp;'}</div></div>`;
+}
+function badge(id, live) { const b = $(id); b.textContent = live ? 'live' : 'sample data'; b.classList.toggle('live', live); }
+function line(id, labels, datasets, yfmt) {
+  charts[id]?.destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type: 'line', data: {labels, datasets: datasets.map(d => ({pointRadius: 0, borderWidth: 2, tension: .2, ...d}))},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {display: datasets.length > 1, labels: {boxWidth: 12}}},
+      scales: {x: {ticks: {maxTicksLimit: 8}}, y: {ticks: {callback: yfmt || (v => v)}}}}
+  });
+}
+async function getJSON(url) {
+  const ctl = new AbortController(); setTimeout(() => ctl.abort(), 9000);
+  const r = await fetch(url, {signal: ctl.signal}); if (!r.ok) throw new Error(r.status); return r.json();
+}
+
+// Sample-data generator (random walk), used when an API fails
+function walk(n, start, vol, seed = 7) {
+  let x = start, s = seed, out = [];
+  for (let i = 0; i < n; i++) { s = (s * 9301 + 49297) % 233280; x *= 1 + (s / 233280 - .5) * vol; out.push(x); }
+  return out;
+}
+function pastDays(n) { const out = []; for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); out.push(iso(d)); } return out; }
+
+const state = {};
+
+// ---------- Treasury ----------
+async function loadRates() {
+  let rows, live = true;
+  try {
+    const j = await getJSON('https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?fields=record_date,security_desc,avg_interest_rate_amt&filter=security_desc:in:(Treasury Bills,Treasury Notes,Treasury Bonds,Total Marketable),record_date:gte:2019-01-01&sort=record_date&page[size]=10000');
+    rows = j.data;
+    if (!rows.length) throw 0;
+  } catch (e) {
+    live = false; rows = [];
+    const months = []; for (let i = 0; i < 60; i++) { const d = new Date(2021, 10 + i, 1); months.push(iso(d)); }
+    const bills = months.map((_, i) => Math.min(5.3, .05 + i * .14) - Math.max(0, i - 40) * .06);
+    months.forEach((m, i) => {
+      rows.push({record_date: m, security_desc: 'Treasury Bills', avg_interest_rate_amt: bills[i]});
+      rows.push({record_date: m, security_desc: 'Treasury Notes', avg_interest_rate_amt: 1.4 + i * .04});
+      rows.push({record_date: m, security_desc: 'Treasury Bonds', avg_interest_rate_amt: 3.0 + i * .012});
+      rows.push({record_date: m, security_desc: 'Total Marketable', avg_interest_rate_amt: 1.6 + i * .05});
+    });
+  }
+  badge('#ratesBadge', live);
+  const names = ['Treasury Bills', 'Treasury Notes', 'Treasury Bonds', 'Total Marketable'];
+  const dates = [...new Set(rows.map(r => r.record_date))].sort();
+  const series = Object.fromEntries(names.map(n => [n, dates.map(d => { const r = rows.find(x => x.record_date === d && x.security_desc === n); return r ? +r.avg_interest_rate_amt : null; })]));
+  const colors = [css('--amber'), css('--blue'), css('--green'), css('--ink')];
+  line('ratesChart', dates.map(d => d.slice(0, 7)), names.map((n, i) => ({label: n, data: series[n], borderColor: colors[i], borderDash: n === 'Total Marketable' ? [5, 4] : []})), v => v + '%');
+  const last = i => series[names[i]].at(-1), prev = i => series[names[i]].at(-13);
+  $('#ratesMetrics').innerHTML = names.map((n, i) => {
+    const d = last(i) - prev(i);
+    return metric(n + ' (' + dates.at(-1).slice(0, 7) + ')', fmt(last(i), 3) + '%', (d >= 0 ? '+' : '') + fmt(d * 100, 0) + ' bp vs. 1y ago', d >= 0 ? 'down' : 'up');
+  }).join('');
+  state.bills = last(0); state.total = last(3); state.ratesDate = dates.at(-1);
+  renderOverview();
+}
+
+// ---------- FX ----------
+const CCY = ['EUR', 'GBP', 'JPY', 'CNY', 'CAD', 'MXN'];
+let fxData, fxSel = 'EUR';
+async function loadFX() {
+  let live = true;
+  try {
+    const start = new Date(); start.setFullYear(start.getFullYear() - 1);
+    const j = await getJSON(`https://api.frankfurter.dev/v1/${iso(start)}..?from=USD&symbols=${CCY.join(',')}`);
+    const dates = Object.keys(j.rates).sort();
+    fxData = {dates, s: Object.fromEntries(CCY.map(c => [c, dates.map(d => j.rates[d][c])]))};
+  } catch (e) {
+    live = false;
+    const dates = pastDays(250), base = {EUR: .89, GBP: .75, JPY: 152, CNY: 7.1, CAD: 1.38, MXN: 18.5};
+    fxData = {dates, s: Object.fromEntries(CCY.map((c, i) => [c, walk(250, base[c], .008, i + 3)]))};
+  }
+  badge('#fxBadge', live);
+  $('#fxMetrics').innerHTML = CCY.map(c => {
+    const s = fxData.s[c], ch = (s.at(-1) / s[0] - 1) * 100;
+    return metric('USD/' + c, fmt(s.at(-1), c === 'JPY' ? 2 : 4), (ch >= 0 ? '+' : '') + fmt(ch, 1) + '% over 1y', ch >= 0 ? 'up' : 'down');
+  }).join('');
+  $('#fxSeg').innerHTML = CCY.map(c => `<button data-c="${c}" class="${c === fxSel ? 'on' : ''}">USD/${c}</button>`).join('');
+  $('#cvTo').innerHTML = CCY.map(c => `<option>${c}</option>`).join('');
+  drawFX(); convert(); renderOverview();
+}
+function drawFX() {
+  document.querySelectorAll('#fxSeg button').forEach(b => b.classList.toggle('on', b.dataset.c === fxSel));
+  line('fxChart', fxData.dates, [{label: 'USD/' + fxSel, data: fxData.s[fxSel], borderColor: css('--blue'), fill: true, backgroundColor: css('--wash')}]);
+}
+function convert() {
+  if (!fxData) return;
+  const c = $('#cvTo').value, r = fxData.s[c].at(-1);
+  $('#cvOut').textContent = fmt(+$('#cvAmt').value * r) + ' ' + c;
+}
+$('#fxSeg').addEventListener('click', e => { if (e.target.dataset.c) { fxSel = e.target.dataset.c; drawFX(); } });
+$('#cvAmt').addEventListener('input', convert); $('#cvTo').addEventListener('change', convert);
+
+// ---------- Crypto ----------
+async function loadCrypto() {
+  let coins, btc, live = true;
+  try {
+    coins = await getJSON('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,ripple,cardano&order=market_cap_desc');
+    const h = await getJSON('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=90&interval=daily');
+    btc = {dates: h.prices.map(p => iso(new Date(p[0]))), px: h.prices.map(p => p[1])};
+  } catch (e) {
+    live = false;
+    coins = [['Bitcoin', 'BTC', 82000, 1.6e12, 3.1e10], ['Ethereum', 'ETH', 2400, 2.9e11, 1.5e10], ['Solana', 'SOL', 104, 5.6e10, 3.2e9], ['XRP', 'XRP', 2.1, 1.2e11, 2.8e9], ['Cardano', 'ADA', .62, 2.2e10, 6e8]]
+      .map(([name, symbol, current_price, market_cap, total_volume], i) => ({name, symbol, current_price, market_cap, total_volume, price_change_percentage_24h: [1.2, -.8, 2.4, .3, -1.5][i]}));
+    btc = {dates: pastDays(91), px: walk(91, 70000, .03, 11)};
+  }
+  badge('#cryptoBadge', live);
+  $('#cryptoBody').innerHTML = coins.map(c => {
+    const ch = c.price_change_percentage_24h || 0;
+    return `<tr><td>${c.name} <span class="sub">${c.symbol.toUpperCase()}</span></td><td>$${fmt(c.current_price, c.current_price < 10 ? 4 : 2)}</td><td class="${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '+' : ''}${fmt(ch)}%</td><td>${big(c.market_cap)}</td><td>${big(c.total_volume)}</td></tr>`;
+  }).join('');
+  line('btcChart', btc.dates, [{label: 'BTC', data: btc.px, borderColor: css('--amber')}], v => '$' + (v / 1000).toFixed(0) + 'k');
+  const rets = btc.px.slice(1).map((p, i) => Math.log(p / btc.px[i]));
+  const mu = rets.reduce((a, b) => a + b, 0) / rets.length;
+  const vol = Math.sqrt(rets.reduce((a, r) => a + (r - mu) ** 2, 0) / (rets.length - 1)) * Math.sqrt(365) * 100;
+  let peak = 0, mdd = 0; btc.px.forEach(p => { peak = Math.max(peak, p); mdd = Math.min(mdd, p / peak - 1); });
+  $('#btcStats').textContent = `90-day return ${fmt((btc.px.at(-1) / btc.px[0] - 1) * 100, 1)}% · annualized volatility ${fmt(vol, 1)}% · max drawdown ${fmt(mdd * 100, 1)}%`;
+  state.coins = coins; state.btc = btc; renderOverview();
+}
+
+// ---------- Overview ----------
+function renderOverview() {
+  const m = [];
+  if (state.bills != null) m.push(metric('Avg. T-bill rate', fmt(state.bills, 3) + '%', state.ratesDate.slice(0, 7)));
+  if (state.total != null) m.push(metric('Avg. rate, all marketable debt', fmt(state.total, 3) + '%', state.ratesDate.slice(0, 7)));
+  if (fxData) { const e = fxData.s.EUR.at(-1); m.push(metric('EUR/USD', fmt(1 / e, 4), fxData.dates.at(-1))); m.push(metric('USD/CNY', fmt(fxData.s.CNY.at(-1), 4), fxData.dates.at(-1))); }
+  if (state.coins) state.coins.slice(0, 2).forEach(c => { const ch = c.price_change_percentage_24h || 0; m.push(metric(c.name, '$' + fmt(c.current_price, 0), (ch >= 0 ? '+' : '') + fmt(ch) + '% 24h', ch >= 0 ? 'up' : 'down')); });
+  $('#ovMetrics').innerHTML = m.join('');
+  if (state.btc && fxData) {
+    const dates = state.btc.dates, b0 = state.btc.px[0];
+    const eur = dates.map(d => { let i = fxData.dates.findLastIndex(x => x <= d); return i < 0 ? null : 1 / fxData.s.EUR[i]; });
+    const e0 = eur.find(v => v != null);
+    line('ovChart', dates, [
+      {label: 'Bitcoin', data: state.btc.px.map(p => p / b0 * 100), borderColor: css('--amber')},
+      {label: 'EUR/USD', data: eur.map(v => v == null ? null : v / e0 * 100), borderColor: css('--blue')}
+    ]);
+  }
+}
+
+// ---------- Bond calculator ----------
+function bondPrice(F, c, y, n) {
+  const k = n * 2, cp = F * c / 2, r = y / 2;
+  let p = 0, dur = 0;
+  for (let t = 1; t <= k; t++) { const cf = cp + (t === k ? F : 0), pv = cf / (1 + r) ** t; p += pv; dur += (t / 2) * pv; }
+  return {p, mac: dur / p, mod: dur / p / (1 + r)};
+}
+function calcBond() {
+  const F = +$('#bFace').value, c = +$('#bCpn').value / 100, y = +$('#bYtm').value / 100, n = Math.max(1, Math.round(+$('#bYrs').value));
+  const b = bondPrice(F, c, y, n), up = bondPrice(F, c, y + .01, n).p, dn = bondPrice(F, c, y - .01, n).p;
+  $('#bondMetrics').innerHTML = [
+    metric('Price', '$' + fmt(b.p), b.p > F ? 'premium' : b.p < F ? 'discount' : 'par'),
+    metric('Macaulay duration', fmt(b.mac) + ' yrs'),
+    metric('Modified duration', fmt(b.mod)),
+    metric('Price if yield +100bp', '$' + fmt(up), fmt((up / b.p - 1) * 100) + '%', 'down'),
+    metric('Price if yield −100bp', '$' + fmt(dn), '+' + fmt((dn / b.p - 1) * 100) + '%', 'up')
+  ].join('');
+  const ys = []; for (let v = 0; v <= 10.001; v += .25) ys.push(v);
+  line('pyChart', ys.map(v => v.toFixed(2) + '%'), [{label: 'Price', data: ys.map(v => bondPrice(F, c, v / 100, n).p), borderColor: css('--blue')}], v => '$' + v);
+}
+document.querySelectorAll('#bond input').forEach(i => i.addEventListener('input', calcBond));
+
+// ---------- Tabs ----------
+document.querySelector('nav.tabs').addEventListener('click', e => {
+  const t = e.target.dataset.tab; if (!t) return;
+  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+  document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === t));
+  Object.values(charts).forEach(c => c.resize());
+});
+
+$('#stamp').textContent = 'Loaded ' + new Date().toLocaleString('en-US', {dateStyle: 'medium', timeStyle: 'short'}) + '.';
+calcBond(); loadRates(); loadFX(); loadCrypto();
+</script>
+</body>
+</html>
